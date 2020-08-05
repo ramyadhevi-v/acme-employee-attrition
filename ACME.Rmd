@@ -1,0 +1,380 @@
+---
+title: "ACME Employee Job Attrition"
+author: "Ramyadhevi Vijayakumar"
+
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+##Objectives
+
+ACME has an attrition problem. We are going to: (1) Identify the primary reasons behind attrition
+(2) Design machine learning algorithms to identify the 10 employees most inclined to leave
+(3) Indicate the likelihood of the attrition of the most important attributes
+
+
+
+## Data Structures
+
+```{r cars, echo = FALSE}
+
+setwd("D:/Data_Mining")
+
+remove(list = ls())
+options(digits = 4, scipen = 9999)
+
+library(tidyverse)
+library(mdsr)
+library(sjPlot)
+library(ggplot2)
+library(rpart)
+library(partykit)  
+library(caret)     
+library(randomForest)
+library(caTools)
+library(mosaic)
+library(ROSE)
+hr = read.csv("HR-Employee-Attrition.csv", header = TRUE)
+attach(hr)
+
+
+
+```
+
+
+
+```{r , echo=FALSE}
+# Part 1: Provide Assistance in isolating the reasons for an "attrition" problem.
+
+
+
+
+# Method 1: Using a General Linear Model
+
+
+# need to convert attrition to a factor
+hr$Attrition = as.factor(hr$Attrition)
+# note: 2 = YES, 1 = NO
+
+# note: we are omitting:
+# "EmployeesNumber" (essentially ID)
+# "Count" (all 1)
+# "Over18" (all Y)
+# "StandardHours" (all 80)
+
+hr_logit <- glm(Attrition ~ Age + BusinessTravel + DailyRate + Department + DistanceFromHome + Education + EducationField
+                + EnvironmentSatisfaction + Gender + HourlyRate + JobInvolvement + JobLevel + JobRole + JobSatisfaction
+                + MaritalStatus + MonthlyIncome + MonthlyRate + NumCompaniesWorked + OverTime + PercentSalaryHike + PerformanceRating + RelationshipSatisfaction
+                + StockOptionLevel + TotalWorkingYears + TrainingTimesLastYear + WorkLifeBalance + YearsAtCompany
+                + YearsInCurrentRole + YearsSinceLastPromotion + YearsWithCurrManager, data = hr, family = "binomial")
+
+#summary(hr_logit)
+```
+## The most significant reasons for attrition are:
+(i)BusinessTravel (Travel_Frequently)
+(ii)DistanceFromHome
+(iii)EnvironmentSatisfaction
+(iv)JobInvolvement
+(v)JobSatisfaction
+(vi)MaritalStatus (Single)
+(vii)NumCompaniesWorked
+ (viii)OverTime (Yes)
+ (ix)YearsSinceLastPromotion
+
+## Attrition 
+
+```{r, echo=FALSE}
+# Now only plot the most significant reasons for attrition:
+
+hr_logit2 <- glm(Attrition ~ BusinessTravel + DistanceFromHome + EnvironmentSatisfaction + JobInvolvement + JobSatisfaction
+                + MaritalStatus + NumCompaniesWorked + OverTime + YearsSinceLastPromotion, data = hr, family = "binomial")
+
+summary(hr_logit2)
+```
+
+## Attrition
+```{r hr_logit2}
+
+plot_model(hr_logit2)
+
+```
+
+## Random Forest
+```{r echo=FALSE}
+# Method 2: Using Random Forest
+
+#Create training and testing subsets
+hr_df = hr %>% mutate( EmployeeNumber = row_number())
+train = hr_df %>% sample_frac(0.8)
+test = hr_df %>% anti_join(train, by = "EmployeeNumber")
+
+test = test %>% select(-EmployeeNumber, -EmployeeCount)
+train = train %>% select(-EmployeeNumber, -EmployeeCount)
+
+#Establish Null Model
+names(train)
+prop.table(table(train$Attrition))
+tally(~Attrition, data = train, format = "percent")                      
+
+#Model
+form = as.formula("Attrition ~ Age + BusinessTravel + DailyRate + Department + DistanceFromHome + Education + EducationField
+                  + EnvironmentSatisfaction + Gender + HourlyRate + JobInvolvement + JobLevel + JobRole + JobSatisfaction
+                  + MaritalStatus + MonthlyIncome + MonthlyRate + NumCompaniesWorked + OverTime + PercentSalaryHike + PerformanceRating + RelationshipSatisfaction
+                  + StockOptionLevel + TotalWorkingYears + TrainingTimesLastYear + WorkLifeBalance + YearsAtCompany
+                  + YearsInCurrentRole + YearsSinceLastPromotion + YearsWithCurrManager")
+
+mod_forest = randomForest(form, data = train, ntree = 200, mtry = 3)
+mod_forest
+
+mod_forest_pred = predict(mod_forest, newdata = test)
+confusionMatrix(mod_forest_pred, test$Attrition)
+
+# note: accuracy is 86.7%
+
+importance(mod_forest) %>% as.data.frame() %>% 
+  rownames_to_column() %>% arrange(desc(MeanDecreaseGini))
+
+```
+
+## Random Forest
+```{r, echo=FALSE}
+
+var_importance = importance(mod_forest) %>% as.data.frame() %>% 
+  rownames_to_column() %>% 
+  arrange( desc(MeanDecreaseGini))
+
+
+ggplot(var_importance, aes(x = reorder(rowname, MeanDecreaseGini), y = MeanDecreaseGini, fill = rowname)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Variable Importance from Random Forest Model") +
+  xlab("Predictors") + ylab("Variable Importance (Mean Decrease in Gini Index)") +
+  scale_fill_discrete(name="Predictor") +
+  coord_flip()
+
+
+# ANSWER
+# With an accuracy of 86.7%, we see that the best predictors of attrition, ranked in greatest importance, are:
+# DailyRate
+# Age
+# DistanceFromHome
+# EducationField
+# Education
+# BusinessTravel
+# Department
+
+```
+
+## Important Variables
+```{r, echo=FALSE}
+# Part 2: Identifying 10 people
+
+
+hr = read.csv("HR-Employee-Attrition.csv", header = TRUE)
+
+
+hr_df = hr %>% mutate( EmployeesNumber = row_number())
+train = hr_df %>% sample_frac(0.8)
+test = hr_df %>% anti_join(train, by = "EmployeesNumber")
+
+
+form = as.formula("Attrition ~ Age + BusinessTravel + DailyRate + Department + DistanceFromHome + Education + EducationField
+                  + EnvironmentSatisfaction + Gender + HourlyRate + JobInvolvement + JobLevel + JobRole + JobSatisfaction
+                  + MaritalStatus + MonthlyIncome + MonthlyRate + NumCompaniesWorked + OverTime + PercentSalaryHike + PerformanceRating + RelationshipSatisfaction
+                  + StockOptionLevel + TotalWorkingYears + TrainingTimesLastYear + WorkLifeBalance + YearsAtCompany
+                  + YearsInCurrentRole + YearsSinceLastPromotion + YearsWithCurrManager")
+
+
+mod_forest = randomForest(form, data = train, ntree = 500, importance = TRUE, na.action = na.omit)
+mod_forest
+```
+##Important Variable 
+```{r}
+
+varImpPlot(mod_forest, type = 1,
+           main = "Variable Importance (Accuracy)",
+           sub = "Random Forest Model")
+
+
+var_importance <- importance(mod_forest)
+#mod_forest
+```
+
+##Confusion Matrix
+
+note: accuracy 83.7%
+```{r, echo=FALSE}
+
+
+mod_forest_pred = predict(mod_forest, newdata = test)
+confusionMatrix(data = mod_forest_pred, reference = test$Attrition,
+                positive = "Yes", mode = "prec_recall")
+
+# note: accuracy 83.7%
+
+mod_forest_pred_probs <- predict(mod_forest, test, type = "prob")
+Employees_flight_risk <- as.data.frame(cbind(test$Attrition, test$EmployeeNumber,
+                                             mod_forest_pred_probs))
+
+
+Employees_flight_risk <- rename(Employees_flight_risk,
+                                Attrition = V1)
+
+Employees_flight_risk <- rename(Employees_flight_risk,
+                                EmployeeNumber = V2)
+
+Employees_flight_risk <- arrange(Employees_flight_risk, desc(Yes))
+
+Employees_attrition_filtered <- Employees_flight_risk %>% filter(Employees_flight_risk$Attrition == 1)
+
+
+#head(Employees_attrition_filtered, 10)
+
+# ANSWER
+# These are the 10 employees most likely to leave according to the prediction analysis.
+
+```
+## Top 10 Employee likely to abscond
+
+These are the 10 employees most likely to leave according to the prediction analysis.
+```{r, echo=FALSE}
+
+#Part 3: Identifying the factors of the 10 individuals
+
+top10_abscond <- hr %>% select (EmployeeNumber, Age, BusinessTravel, Department, EducationField, DailyRate, DistanceFromHome, Education)
+top10_abscond2 <- top10_abscond %>% filter (EmployeeNumber %in% c(1226, 632, 1746, 72, 1050, 901, 217, 893, 2010, 621))
+top10_abscond2
+
+```
+
+## Likelihood of Attrition - Age 
+
+Of the 10 employees most likely to abscond, half of them were below age 30
+```{r, echo=FALSE}
+#Below graphs indicate the likelihood of attrition for the most important attributes
+
+ggplot(top10_abscond2, aes(x = Age)) +
+  geom_bar(fill = "pink") +
+  ggtitle("Likelihood of Attrition - Age") +
+  xlab("Age") + ylab("Count")
+
+```
+
+
+## Likelihood of Attrition - Business Travel 
+
+Of the 10 employees most likely to abscond, 7 travel rarely and 3 travel frequently
+```{r, echo=FALSE}
+
+ggplot(top10_abscond2, aes(x = BusinessTravel)) +
+  geom_bar(fill = "lightblue") +
+  ggtitle("Likelihood of Attrition - Business Travel") +
+  xlab("Business Travel") + ylab("Count")  
+
+```
+
+## Likelihood of Attrition - Department
+
+Of the 10 employees most likely to abscond, most were found in the Sales department follwed with a 3 in Research & Development and the rest were in the Human Resources department.
+```{r, echo=FALSE}
+ggplot(top10_abscond2, aes(x = Department)) +
+  geom_bar(fill = "orange", color = "black") +
+  ggtitle("Likelihood of Attrition - Department") +
+  xlab("Department") + ylab("Count")
+
+```
+
+## Likelihood of Attrition - Education Field
+
+Of the 10 employees most likely to abscond, most had their education field as Marketing and the rest in Life Science and Medical
+```{r, echo=FALSE}
+ggplot(top10_abscond2, aes(x = EducationField )) +
+  geom_bar(fill = "purple") +
+  ggtitle("Likelihood of Attrition - Education Field") +
+  xlab("Education Field") + ylab("Count")
+
+```
+
+## Likelihood of Attrition - Daily Rate
+Of the 10 employees most likely to abscond, half the employees had a daily rate less than 500.
+
+```{r, echo=FALSE}
+
+ggplot(top10_abscond2, aes(x = DailyRate)) +
+  geom_bar(fill = "green") +
+  ggtitle("Likelihood of Attrition - Daily Rate") +
+  xlab("Daily Rate") + ylab("Count")
+
+```
+
+## Likelihood of Attrition - Distance From Home
+Of the 10 employees most likely to abscond, majority had to work at a distance over 20 from home.
+```{r, echo=FALSE}
+
+ggplot(top10_abscond2, aes(x = DistanceFromHome)) +
+  geom_bar(fill = "Pink") +
+  ggtitle("Likelihood of Attrition - Distance From Home") +
+  xlab("Distance From Home") + ylab("Count")
+ 
+
+```
+
+## Likelihood of Attrition - Education
+
+ Of the 10 employees most likely to abscond, 3 have an education level of 4, 6 have an education level of 3, and
+ 1 has an education level of 1.
+```{r,echo=FALSE}
+ 
+
+ggplot(top10_abscond2, aes(x = Education )) +
+  geom_bar(fill = "lightgreen") +
+  ggtitle("Likelihood of Attrition - Education") +
+  xlab("Education") + ylab("Count")
+
+
+
+```
+
+
+
+
+
+## ROC CONFUSION MATRIX
+
+
+```{r, echo=FALSE}
+model_logit_hr <- glm(Attrition ~ Age + BusinessTravel + DailyRate + Department + DistanceFromHome + Education + EducationField
+                + EnvironmentSatisfaction + Gender + HourlyRate + JobInvolvement + JobLevel + JobRole + JobSatisfaction
+                + MaritalStatus + MonthlyIncome + MonthlyRate + NumCompaniesWorked + OverTime + PercentSalaryHike + PerformanceRating + RelationshipSatisfaction
+                + StockOptionLevel + TotalWorkingYears + TrainingTimesLastYear + WorkLifeBalance + YearsAtCompany
+                + YearsInCurrentRole + YearsSinceLastPromotion + YearsWithCurrManager, data = hr, family = "binomial")
+
+logit_predict =predict(model_logit_hr, newdata = hr, type="response")  
+logit_pred = as.factor(ifelse(logit_predict > 0.50, "Yes", "No") )
+confusionMatrix(logit_pred, as.factor(hr$Attrition))
+```
+## ROC CURVE
+
+The ROC Curve shows that the attrition prediction model can correctly distinguish between a 
+true positive and false positive rate with an accuracy of 87.8%.
+
+
+```{r, echo=FALSE}
+
+cm_glm = confusionMatrix(logit_pred, as.factor(hr$Attrition))
+roc.curve(as.factor(hr$Attrition), logit_predict, plotit = T, col=4)
+
+accuracy.meas(as.factor(hr$Attrition), logit_predict, threshold = 0.50)
+##ROC CURVE
+
+#AUC is 0.8687
+
+
+# ANSWER
+# AUC is 0.8687
+```
+
+
+
+
