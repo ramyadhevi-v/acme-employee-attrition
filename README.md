@@ -14,4 +14,4 @@ R - packages used: tidyverse, mdsr, sjPlot, ggplot2, rpart, partykit, caret, ran
 * Random Forest
 
 ## Dataset
-https://github.com/Ramya2112/acme-employee-attrition/blob/master/HR-Employee-Attrition.csv
+https://github.com/ramyadhevi-v/acme-employee-attrition/blob/master/HR-Employee-Attrition.csv
