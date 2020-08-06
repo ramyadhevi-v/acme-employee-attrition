@@ -1,5 +1,5 @@
 # acme-employee-attrition
-Isolated reasons for an "attrition" problem and developed a predictive alogrithm 
+Isolated reasons for an "attrition" problem and developed a predictive algorithm 
 
 ## Objective
 * To provide assistance in isolating the reasons for an “attrition” problem
@@ -9,7 +9,7 @@ Isolated reasons for an "attrition" problem and developed a predictive alogrithm
 ## Technology 
 R - packages used: tidyverse, mdsr, sjPlot, ggplot2, rpart, partykit, caret, randomforest
 
-## Machine Leraning Models
+## Machine Learning Models
 * Multiple Linear Regression
 * Random Forest
 
